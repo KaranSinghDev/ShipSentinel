@@ -1,0 +1,58 @@
+# ShipSentinel schema mapping config
+# Map YOUR data source column names to the ShipSentinel standard schema.
+# Edit source values to match your actual column names.
+
+fields:
+  id:
+    source: "shipment_id"
+    type: string
+    required: true
+  carrier:
+    source: "carrier_name"
+    type: string
+    required: true
+  origin:
+    source: "origin_city"
+    type: string
+    required: true
+  destination:
+    source: "destination_city"
+    type: string
+    required: true
+  service_type:
+    source: "service_level"
+    type: string
+    required: true
+    allowed_values: ["express", "standard", "economy"]
+  customer_tier:
+    source: "customer_segment"
+    type: string
+    required: false
+    default: "standard"
+  distance_km:
+    source: "distance_km"
+    type: float
+    required: true
+  weight_kg:
+    source: "weight_kg"
+    type: float
+    required: true
+  shipment_date:
+    source: "created_at"
+    type: datetime
+    format: "%Y-%m-%dT%H:%M:%S"
+    required: true
+  scheduled_delivery:
+    source: "promised_delivery_date"
+    type: datetime
+    format: "%Y-%m-%dT%H:%M:%S"
+    required: true
+  actual_delivery:
+    source: "delivered_at"
+    type: datetime
+    format: "%Y-%m-%dT%H:%M:%S"
+    required: false
+  sla_breached:
+    source: "sla_violated"
+    type: boolean
+    required: false
