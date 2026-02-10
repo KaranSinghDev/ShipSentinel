@@ -14,6 +14,7 @@ from shipsentinel.db.models import Shipment, Prediction, TrainingRun
 from shipsentinel.api.schemas import PredictionResponse, TrainingRunResponse
 from shipsentinel.ml.features import build_feature_row
 from shipsentinel.ml.predictor import Predictor, ModelNotLoadedError
+from shipsentinel.worker.tasks import train_model
 
 router = APIRouter(tags=["predictions"])
 
@@ -60,7 +61,6 @@ def trigger_training(
     Poll GET /training/{id} or check MLflow for completion.
     """
     import uuid
-    from shipsentinel.worker.tasks import train_model
 
     run = TrainingRun(model_version=f"v{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:6]}")
     db.add(run)

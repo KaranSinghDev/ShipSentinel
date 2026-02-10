@@ -5,6 +5,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from shipsentinel.main import app
 from shipsentinel.db.session import Base, get_db
+from shipsentinel.config import Settings, get_settings
+
+
+# Shared test settings — all tests use SQLite in-memory, no external services
+TEST_SETTINGS = Settings(
+    database_url="sqlite:///:memory:",
+    redis_url="redis://localhost:6379/0",
+    mlflow_tracking_uri="file:///tmp/shipsentinel-test-mlruns",
+    model_registry_name="test-lgbm",
+    sla_breach_threshold=0.5,
+)
 
 
 @pytest.fixture(scope="session")
@@ -37,7 +48,12 @@ def db(engine):
 def client(db):
     def override_get_db():
         yield db
+
+    def override_get_settings():
+        return TEST_SETTINGS
+
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_settings] = override_get_settings
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

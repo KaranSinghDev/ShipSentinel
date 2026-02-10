@@ -1,12 +1,11 @@
 """
 Unit tests for ml/data.py — DB query layer for training data.
-Uses the in-memory SQLite + transaction-rollback fixture from conftest.
 """
 import pytest
 from shipsentinel.ml.data import get_labelled_shipments, InsufficientDataError, MIN_TRAINING_SAMPLES
 
 
-def _make_shipment(db_session, suffix: str, sla_breached: bool | None = True):
+def _make_shipment(db, suffix: str, sla_breached=True):
     from datetime import datetime
     from shipsentinel.db.models import Shipment
     s = Shipment(
@@ -18,35 +17,32 @@ def _make_shipment(db_session, suffix: str, sla_breached: bool | None = True):
         scheduled_delivery=datetime(2024, 1, 4, 9, 0),
         sla_breached=sla_breached,
     )
-    db_session.add(s)
-    db_session.flush()
+    db.add(s)
+    db.flush()
     return s
 
 
-def test_insufficient_data_raises(db_session):
-    """Fewer than MIN_TRAINING_SAMPLES labelled shipments → InsufficientDataError."""
+def test_insufficient_data_raises(db):
     for i in range(MIN_TRAINING_SAMPLES - 1):
-        _make_shipment(db_session, str(i), sla_breached=bool(i % 2))
+        _make_shipment(db, str(i), sla_breached=bool(i % 2))
     with pytest.raises(InsufficientDataError):
-        get_labelled_shipments(db_session)
+        get_labelled_shipments(db)
 
 
-def test_unlabelled_shipments_excluded(db_session):
-    """Shipments without outcome (sla_breached=None) must not appear in training data."""
+def test_unlabelled_shipments_excluded(db):
     for i in range(MIN_TRAINING_SAMPLES):
-        _make_shipment(db_session, f"lab-{i}", sla_breached=bool(i % 2))
-    _make_shipment(db_session, "unlabelled", sla_breached=None)
+        _make_shipment(db, f"lab-{i}", sla_breached=bool(i % 2))
+    _make_shipment(db, "unlabelled", sla_breached=None)
 
-    rows = get_labelled_shipments(db_session)
+    rows = get_labelled_shipments(db)
     assert all(r["sla_breached"] is not None for r in rows)
     assert len(rows) == MIN_TRAINING_SAMPLES
 
 
-def test_returns_required_feature_keys(db_session):
-    """Every returned dict must have all feature keys + label."""
+def test_returns_required_feature_keys(db):
     for i in range(MIN_TRAINING_SAMPLES):
-        _make_shipment(db_session, f"k-{i}", sla_breached=True)
-    rows = get_labelled_shipments(db_session)
+        _make_shipment(db, f"k-{i}", sla_breached=True)
+    rows = get_labelled_shipments(db)
     required = {
         "carrier", "origin", "destination", "service_type", "customer_tier",
         "distance_km", "weight_kg", "shipment_date", "scheduled_delivery", "sla_breached",

@@ -2,16 +2,15 @@
 Integration tests for prediction and training routes.
 The Predictor singleton is mocked so no MLflow server or trained model is required.
 """
+import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
-
-import pytest
 
 from shipsentinel.db.models import Shipment
 
 
 @pytest.fixture()
-def seeded_shipment(db_session):
+def seeded_shipment(db):
     s = Shipment(
         id="PRED-001",
         carrier="FedEx", origin="NYC", destination="LA",
@@ -20,13 +19,12 @@ def seeded_shipment(db_session):
         shipment_date=datetime(2024, 3, 1, 9, 0),
         scheduled_delivery=datetime(2024, 3, 3, 9, 0),
     )
-    db_session.add(s)
-    db_session.flush()
+    db.add(s)
+    db.flush()
     return s
 
 
 def _mock_predictor(prob=0.72, predicted=True):
-    """Return a mock Predictor that returns (prob, predicted) without loading MLflow."""
     mock = MagicMock()
     mock.is_loaded.return_value = True
     mock.model_version = "v-test"

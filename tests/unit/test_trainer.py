@@ -1,37 +1,24 @@
 """
 Unit tests for ml/trainer.py.
 MLflow is redirected to a temp directory so no server is needed.
-The LightGBM model is trained on small synthetic data.
+LightGBM trains on small synthetic data.
 """
-import os
-import tempfile
 from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import patch
 import pytest
 
 from shipsentinel.ml.data import MIN_TRAINING_SAMPLES
-from shipsentinel.ml.trainer import train, _make_version, LGBM_PARAMS
+from shipsentinel.ml.trainer import _make_version
+from tests.conftest import TEST_SETTINGS
 
 
 @pytest.fixture()
-def settings_with_temp_mlflow(tmp_path):
-    """Settings pointing to a file-based MLflow tracking URI (no server needed)."""
-    from shipsentinel.config import Settings
-    return Settings(
-        database_url="sqlite:///:memory:",
-        mlflow_tracking_uri=f"file://{tmp_path}/mlruns",
-        model_registry_name="test-lgbm",
-    )
-
-
-@pytest.fixture()
-def minimal_session_with_data(db_session):
-    """Seed db_session with MIN_TRAINING_SAMPLES labelled shipments."""
+def db_with_data(db):
+    """Seed db with MIN_TRAINING_SAMPLES labelled shipments."""
     from shipsentinel.db.models import Shipment
     base = datetime(2024, 3, 1, 8, 0)
     for i in range(MIN_TRAINING_SAMPLES):
-        db_session.add(Shipment(
+        db.add(Shipment(
             id=f"TR-{i:04d}",
             carrier=["FedEx", "UPS", "DHL"][i % 3],
             origin="NYC", destination="LA",
@@ -43,8 +30,8 @@ def minimal_session_with_data(db_session):
             scheduled_delivery=base + timedelta(hours=i + 48),
             sla_breached=bool(i % 3 == 0),
         ))
-    db_session.flush()
-    return db_session
+    db.flush()
+    return db
 
 
 def test_make_version_format():
@@ -53,30 +40,44 @@ def test_make_version_format():
     assert len(v) > 10
 
 
-def test_train_returns_expected_keys(minimal_session_with_data, settings_with_temp_mlflow):
-    """train() should return auc, mlflow_run_id, n_samples, model_version."""
-    # Patch mlflow registration (no MLflow server)
+def test_train_returns_expected_keys(db_with_data, tmp_path):
+    from shipsentinel.config import Settings
+    from shipsentinel.ml.trainer import train
+    settings = Settings(
+        database_url="sqlite:///:memory:",
+        mlflow_tracking_uri=f"file://{tmp_path}/mlruns",
+        model_registry_name="test-lgbm",
+    )
     with patch("shipsentinel.ml.trainer.mlflow.sklearn.log_model"), \
          patch("shipsentinel.ml.trainer.mlflow.set_tag"):
-        result = train(minimal_session_with_data, settings_with_temp_mlflow)
+        result = train(db_with_data, settings)
 
-    assert "auc" in result
-    assert "mlflow_run_id" in result
-    assert "n_samples" in result
-    assert "model_version" in result
+    assert {"auc", "mlflow_run_id", "n_samples", "model_version"} <= result.keys()
     assert result["n_samples"] == MIN_TRAINING_SAMPLES
 
 
-def test_train_auc_in_valid_range(minimal_session_with_data, settings_with_temp_mlflow):
-    """Cross-validation AUC must be in [0.0, 1.0]."""
+def test_train_auc_in_valid_range(db_with_data, tmp_path):
+    from shipsentinel.config import Settings
+    from shipsentinel.ml.trainer import train
+    settings = Settings(
+        database_url="sqlite:///:memory:",
+        mlflow_tracking_uri=f"file://{tmp_path}/mlruns",
+        model_registry_name="test-lgbm",
+    )
     with patch("shipsentinel.ml.trainer.mlflow.sklearn.log_model"), \
          patch("shipsentinel.ml.trainer.mlflow.set_tag"):
-        result = train(minimal_session_with_data, settings_with_temp_mlflow)
+        result = train(db_with_data, settings)
     assert 0.0 <= result["auc"] <= 1.0
 
 
-def test_train_insufficient_data_propagates(db_session, settings_with_temp_mlflow):
-    """train() should propagate InsufficientDataError when < MIN_TRAINING_SAMPLES."""
+def test_train_insufficient_data_propagates(db):
+    from shipsentinel.config import Settings
+    from shipsentinel.ml.trainer import train
     from shipsentinel.ml.data import InsufficientDataError
+    settings = Settings(
+        database_url="sqlite:///:memory:",
+        mlflow_tracking_uri="file:///tmp/test-mlruns",
+        model_registry_name="test-lgbm",
+    )
     with pytest.raises(InsufficientDataError):
-        train(db_session, settings_with_temp_mlflow)
+        train(db, settings)
